@@ -411,7 +411,7 @@ func IsLogin(body []byte) bool {
 
 func ParseCourseSchedule(input string) ([]int, string, string) {
 	// Regex to extract the days, start time, and end time
-	re := regexp.MustCompile(`(?P<days>[^\d]+) از (?P<start>\d{1,2}:\d{2}) تا (?P<end>\d{1,2}:\d{2})`)
+	re := regexp.MustCompile(`(?P<days>[^\d]+) از (?P<start>\d{1,2}:\d{1,2}) تا (?P<end>\d{1,2}:\d{1,2})`)
 	matches := re.FindStringSubmatch(input)
 
 	// Map to hold the names of matched groups
@@ -425,12 +425,30 @@ func ParseCourseSchedule(input string) ([]int, string, string) {
 	days := strings.Split(result["days"], " و ")
 	daysOfWeek := make([]int, 0, len(days))
 	for _, day := range days {
-		if dayNum, exists := dayOfWeekMap[day]; exists {
+		if dayNum, exists := dayOfWeekMap[strings.TrimSpace(day)]; exists {
 			daysOfWeek = append(daysOfWeek, dayNum)
 		}
 	}
 
-	return daysOfWeek, result["start"], result["end"]
+	// Add missing zero to time format if necessary
+	startTime := fixTimeFormat(result["start"])
+	endTime := fixTimeFormat(result["end"])
+
+	return daysOfWeek, startTime, endTime
+}
+
+func fixTimeFormat(timeStr string) string {
+	parts := strings.Split(timeStr, ":")
+	if len(parts) == 2 {
+		if len(parts[0]) == 1 {
+			parts[0] = "0" + parts[0]
+		}
+		if len(parts[1]) == 1 {
+			parts[1] = parts[1] + "0"
+		}
+		return parts[0] + ":" + parts[1]
+	}
+	return timeStr
 }
 
 func ParseExamDateTime(input string) (string, string) {
