@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/cookiejar"
@@ -45,20 +46,21 @@ var EduUsername string
 var EduPassword string
 
 type Course struct {
-	Code       string
-	Group      int
-	Name       string
-	Lecturer   string
-	Capacity   int
-	Registered int
-	Units      int
-	ExamDate   string
-	ExamTime   string
-	DaysOfWeek []int
-	StartTime  string
-	EndTime    string
-	Info       string
-	Department string
+	Code           string
+	Group          int
+	Name           string
+	Lecturer       string
+	Capacity       int
+	Registered     int
+	Units          int
+	ExamDate       *string
+	ExamTime       *string
+	DaysOfWeek     []int
+	StartTime      *string
+	EndTime        *string
+	Info           *string
+	Department     string
+	DepartmentCode int
 }
 
 type StatusCodeError struct {
@@ -73,6 +75,14 @@ func (e StatusCodeError) Error() string {
 func IsServerError(err error) bool {
 	unwrapped, ok := err.(StatusCodeError)
 	return ok && unwrapped.ReceivedStatusCode >= 500
+}
+
+func trimAndNilIfEmpty(s string) *string {
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
 }
 
 var Courses = make(map[string]Course)
@@ -266,26 +276,31 @@ func CheckDiff(ctx context.Context, departmentID int, departmentName string) (in
 				}
 				// Now check the index
 				switch i {
-				case 0: // course ID
-					course.Code = text
-				case 1: // course group
-					course.Group, _ = strconv.Atoi(text)
-				case 2: // units
-					course.Units, _ = strconv.Atoi(text)
-				case 3: // name of course
-					course.Name = text
-				case 5: // total capacity
-					course.Capacity, _ = strconv.Atoi(text)
-				case 6:
-					course.Registered, _ = strconv.Atoi(text)
-				case 7: // Lecturer name
-					course.Lecturer = text
-				case 8: // Exam date
-					course.ExamDate, course.ExamTime = ParseExamDateTime(text)
-				case 9: // Schedule
-					course.DaysOfWeek, course.StartTime, course.EndTime = ParseCourseSchedule(text)
-				case 11: // Info
-					course.Info = text
+					case 0: // course ID
+						course.Code = text
+					case 1: // course group
+						course.Group, _ = strconv.Atoi(text)
+					case 2: // units
+						course.Units, _ = strconv.Atoi(text)
+					case 3: // name of course
+						course.Name = text
+					case 5: // total capacity
+						course.Capacity, _ = strconv.Atoi(text)
+					case 6:
+						course.Registered, _ = strconv.Atoi(text)
+					case 7: // Lecturer name
+						course.Lecturer = text
+					case 8: // Exam date
+						examDate, examTime := ParseExamDateTime(text)
+						course.ExamDate = trimAndNilIfEmpty(examDate)
+						course.ExamTime = trimAndNilIfEmpty(examTime)
+					case 9: // Schedule
+						daysOfWeek, startTime, endTime := ParseCourseSchedule(text)
+						course.DaysOfWeek = daysOfWeek
+						course.StartTime = trimAndNilIfEmpty(startTime)
+						course.EndTime = trimAndNilIfEmpty(endTime)
+					case 11: // Info
+						course.Info = trimAndNilIfEmpty(text)
 				}
 			})
 			// If we couldn't get this row, just fuck it
@@ -294,8 +309,9 @@ func CheckDiff(ctx context.Context, departmentID int, departmentName string) (in
 			}
 			// replace the _ with space in deparmentName
 			course.Department = strings.Replace(departmentName, "_", " ", -1)
+			course.DepartmentCode = departmentID
 			// Replace the old course
-			Courses[course.Code] = course
+			Courses[fmt.Sprintf("%s-%d", course.Code, course.Group)] = course
 			coursesGot++
 		})
 	})
