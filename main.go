@@ -106,6 +106,7 @@ type Course struct {
 	Info           *string
 	Department     string
 	DepartmentCode int
+	Grade		   string
 }
 
 type StatusCodeError struct {
@@ -300,10 +301,19 @@ func CheckDiff(ctx context.Context, departmentID int, departmentName string) (in
 	// Get the table
 	var coursesGot int
 	doc.Find(".contentTable").Each(func(tableI int, table *goquery.Selection) {
-		// We only need the first one
-		if tableI != 0 {
-			return
-		}
+		var grade string
+		// Find the grade based on the first tr in the tbody
+		table.Find("tbody tr").First().Find("td").Each(func(_ int, column *goquery.Selection) {
+			text := strings.TrimSpace(column.Text())
+			if strings.Contains(text, "کارشناسی ارشد") {
+				grade = "ms"
+			} else if strings.Contains(text, "دکترا") {
+				grade = "phd"
+			} else {
+				grade = "bs"
+			}
+		})
+
 		// Loop each row
 		table.Find("tr").Each(func(_ int, row *goquery.Selection) {
 			var course Course
@@ -321,38 +331,40 @@ func CheckDiff(ctx context.Context, departmentID int, departmentName string) (in
 				}
 				// Now check the index
 				switch i {
-					case 0: // course ID
-						course.Code = text
-					case 1: // course group
-						course.Group, _ = strconv.Atoi(text)
-					case 2: // units
-						course.Units, _ = strconv.Atoi(text)
-					case 3: // name of course
-						course.Name = text
-					case 5: // total capacity
-						course.Capacity, _ = strconv.Atoi(text)
-					case 6:
-						course.Registered, _ = strconv.Atoi(text)
-					case 7: // Lecturer name
-						course.Lecturer = text
-					case 8: // Exam date
-						examDate, examTime := ParseExamDateTime(text)
-						course.ExamDate = trimAndNilIfEmpty(examDate)
-						course.ExamTime = trimAndNilIfEmpty(examTime)
-					case 9: // Schedule
-						daysOfWeek, startTime, endTime := ParseCourseSchedule(text)
-						course.DaysOfWeek = daysOfWeek
-						course.StartTime = trimAndNilIfEmpty(startTime)
-						course.EndTime = trimAndNilIfEmpty(endTime)
-					case 11: // Info
-						course.Info = trimAndNilIfEmpty(text)
+				case 0: // course ID
+					course.Code = text
+				case 1: // course group
+					course.Group, _ = strconv.Atoi(text)
+				case 2: // units
+					course.Units, _ = strconv.Atoi(text)
+				case 3: // name of course
+					course.Name = text
+				case 5: // total capacity
+					course.Capacity, _ = strconv.Atoi(text)
+				case 6:
+					course.Registered, _ = strconv.Atoi(text)
+				case 7: // Lecturer name
+					course.Lecturer = text
+				case 8: // Exam date
+					examDate, examTime := ParseExamDateTime(text)
+					course.ExamDate = trimAndNilIfEmpty(examDate)
+					course.ExamTime = trimAndNilIfEmpty(examTime)
+				case 9: // Schedule
+					daysOfWeek, startTime, endTime := ParseCourseSchedule(text)
+					course.DaysOfWeek = daysOfWeek
+					course.StartTime = trimAndNilIfEmpty(startTime)
+					course.EndTime = trimAndNilIfEmpty(endTime)
+				case 11: // Info
+					course.Info = trimAndNilIfEmpty(text)
 				}
 			})
-			// If we couldn't get this row, just fuck it
+			// If we couldn't get this row, just return
 			if !ok {
 				return
 			}
-			// replace the _ with space in deparmentName
+			// Set the course grade
+			course.Grade = grade
+			// replace the _ with space in departmentName
 			course.Department = strings.Replace(departmentName, "_", " ", -1)
 			course.DepartmentCode = departmentID
 			// Replace the old course
@@ -362,6 +374,7 @@ func CheckDiff(ctx context.Context, departmentID int, departmentName string) (in
 	})
 	return coursesGot, nil
 }
+
 
 func Login(ctx context.Context) error {
 	jar, _ := cookiejar.New(nil)
