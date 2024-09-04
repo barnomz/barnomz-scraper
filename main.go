@@ -100,13 +100,17 @@ type Course struct {
 	Units          int
 	ExamDate       *string
 	ExamTime       *string
-	DaysOfWeek     []int
-	StartTime      *string
-	EndTime        *string
+	Sessions       []CourseSession
 	Info           *string
 	Department     string
 	DepartmentCode int
-	Grade		   string
+	Grade          string
+}
+
+type CourseSession struct {
+	DayOfWeek int
+	StartTime string
+	EndTime   string
 }
 
 type StatusCodeError struct {
@@ -349,11 +353,9 @@ func CheckDiff(ctx context.Context, departmentID int, departmentName string) (in
 					examDate, examTime := ParseExamDateTime(text)
 					course.ExamDate = trimAndNilIfEmpty(examDate)
 					course.ExamTime = trimAndNilIfEmpty(examTime)
-				case 9: // Schedule
-					daysOfWeek, startTime, endTime := ParseCourseSchedule(text)
-					course.DaysOfWeek = daysOfWeek
-					course.StartTime = trimAndNilIfEmpty(startTime)
-					course.EndTime = trimAndNilIfEmpty(endTime)
+				case 9: // Session
+					sessions := ParseCourseSession(text)
+					course.Sessions = sessions
 				case 11: // Info
 					course.Info = trimAndNilIfEmpty(text)
 				}
@@ -467,32 +469,37 @@ func IsLogin(body []byte) bool {
 	return bytes.Contains(body, []byte("https://accounts.sharif.edu/cas/login?service=https://edu.sharif.edu/login.jsp"))
 }
 
-func ParseCourseSchedule(input string) ([]int, string, string) {
-	// Regex to extract the days, start time, and end time
+func ParseCourseSession(input string) []CourseSession {
+	// Regex to extract the days, start time, and end time patterns
 	re := regexp.MustCompile(`(?P<days>[^\d]+) از (?P<start>\d{1,2}:\d{1,2}) تا (?P<end>\d{1,2}:\d{1,2})`)
-	matches := re.FindStringSubmatch(input)
+	matches := re.FindAllStringSubmatch(input, -1)
 
-	// Map to hold the names of matched groups
-	groupNames := re.SubexpNames()
+	// Initialize slice for course sessions
+	sessions := make([]CourseSession, 0)
 
-	result := make(map[string]string)
-	for i, match := range matches {
-		result[groupNames[i]] = match
-	}
+	for _, match := range matches {
+		// Map to hold the names of matched groups
+		groupNames := re.SubexpNames()
+		result := make(map[string]string)
+		for i, submatch := range match {
+			result[groupNames[i]] = submatch
+		}
 
-	days := strings.Split(result["days"], " و ")
-	daysOfWeek := make([]int, 0, len(days))
-	for _, day := range days {
-		if dayNum, exists := dayOfWeekMap[strings.TrimSpace(day)]; exists {
-			daysOfWeek = append(daysOfWeek, dayNum)
+		// Split the days and convert them to day numbers
+		days := strings.Split(result["days"], " و ")
+		for _, day := range days {
+			if dayNum, exists := dayOfWeekMap[strings.TrimSpace(day)]; exists {
+				session := CourseSession{
+					DayOfWeek: dayNum,
+					StartTime: fixTimeFormat(result["start"]),
+					EndTime:   fixTimeFormat(result["end"]),
+				}
+				sessions = append(sessions, session)
+			}
 		}
 	}
 
-	// Add missing zero to time format if necessary
-	startTime := fixTimeFormat(result["start"])
-	endTime := fixTimeFormat(result["end"])
-
-	return daysOfWeek, startTime, endTime
+	return sessions
 }
 
 func fixTimeFormat(timeStr string) string {
