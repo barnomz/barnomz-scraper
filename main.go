@@ -105,6 +105,8 @@ type Course struct {
 	Department     string
 	DepartmentCode int
 	Grade          string
+	Year           int
+	Semester       int
 }
 
 type CourseSession struct {
@@ -302,6 +304,26 @@ func CheckDiff(ctx context.Context, departmentID int, departmentName string) (in
 	if err != nil {
 		return 0, err
 	}
+
+	var year, semester int
+	doc.Find("td.header[colspan='13']").Each(func(i int, selection *goquery.Selection) {
+		text := strings.TrimSpace(selection.Text())
+		re := regexp.MustCompile(`نیمسال (\d+) (\d{4})-(\d{4})`)
+		matches := re.FindStringSubmatch(text)
+		if len(matches) > 0 {
+			semesterText := matches[1]
+			year, _ = strconv.Atoi(matches[2])
+			// Determine semester (1 = first, 2 = second, 3 = summer)
+			if semesterText == "اول" {
+				semester = 1
+			} else if semesterText == "دوم" {
+				semester = 2
+			} else {
+				semester = 3 // summer semester or any other case
+			}
+		}
+	})
+
 	// Get the table
 	var coursesGot int
 	doc.Find(".contentTable").Each(func(tableI int, table *goquery.Selection) {
@@ -366,6 +388,9 @@ func CheckDiff(ctx context.Context, departmentID int, departmentName string) (in
 			}
 			// Set the course grade
 			course.Grade = grade
+			// Set the year and semester for the course
+			course.Year = year
+			course.Semester = semester
 			// replace the _ with space in departmentName
 			course.Department = strings.Replace(departmentName, "_", " ", -1)
 			course.DepartmentCode = departmentID
