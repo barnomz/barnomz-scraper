@@ -306,23 +306,22 @@ func CheckDiff(ctx context.Context, departmentID int, departmentName string) (in
 	}
 
 	var year, semester int
-	doc.Find("td.header[colspan='13']").Each(func(i int, selection *goquery.Selection) {
-		text := strings.TrimSpace(selection.Text())
-		re := regexp.MustCompile(`نیمسال (\d+) (\d{4})-(\d{4})`)
-		matches := re.FindStringSubmatch(text)
-		if len(matches) > 0 {
-			semesterText := matches[1]
-			year, _ = strconv.Atoi(matches[2])
-			// Determine semester (1 = first, 2 = second, 3 = summer)
-			if semesterText == "اول" {
-				semester = 1
-			} else if semesterText == "دوم" {
-				semester = 2
-			} else {
-				semester = 3 // summer semester or any other case
-			}
+	selection := doc.Find("td.header[colspan='13']").First()
+	text := strings.TrimSpace(selection.Text())
+	re := regexp.MustCompile(`نیمسال (\S+) (\d{4})-(\d{4})`)
+	matches := re.FindStringSubmatch(text)
+	if len(matches) > 0 {
+		semesterText := matches[1]
+		year, _ = strconv.Atoi(matches[3])
+		// Determine semester (1 = first, 2 = second, 3 = summer)
+		if semesterText == "اول" {
+			semester = 1
+		} else if semesterText == "دوم" {
+			semester = 2
+		} else {
+			semester = 3 // summer semester or any other case
 		}
-	})
+	}	
 
 	// Get the table
 	var coursesGot int
